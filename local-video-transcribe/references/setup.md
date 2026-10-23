@@ -24,7 +24,7 @@ python3.11 -m venv .venv
 
 PyAV 提供音视频解码，一般无需另装 FFmpeg。CPU INT8 是两端通用基线；macOS 此后端使用 CPU，不承诺 Metal 加速。Windows 已具备兼容 CUDA/cuDNN 时可用 `--device cuda --compute-type float16`；失败时先说明原因，用户同意切换或已授权自动降级后再使用 CPU。GPU 依赖需按安装版本核对，不强行改动现有驱动。
 
-`base` 是速度优先默认值；可通过 `prepare --model small` 准备更大多语种模型，并传对应 `--model-dir`。`config.json` 中 `asr_model` 控制 prepare 的默认模型；transcribe 实际使用显式指定目录，不会根据名字联网解析。中英文混说采用逐窗口语言检测；特别短的片段可能误判，可用 `--language zh` 或 `en` 固定语言。
+`base` 是速度优先默认值；可通过 `prepare --model small` 准备更大多语种模型，并传对应 `--model-dir`。`config.json` 中 `asr_model` 控制 prepare 的默认模型；transcribe 实际使用显式指定目录，不会根据名字联网解析。先按静音停顿切分语音区域（最长约 20 秒），各区域独立识别语言并恢复全局时间轴，避免整段中文之后的英文被忽略。没有停顿的句内中英混说仍可能识别错误；特别短的片段也可能误判，可用 `--language zh` 或 `en` 固定主要语言。内部片段时间用于定位修改记录，不导出字幕。
 
 复核不需要 API key 或另装 SDK，由当前 Codex 的子 agent 工具完成。只运行 Python 脚本不会自动启动 Codex 子 agent。
 

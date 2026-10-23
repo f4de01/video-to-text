@@ -11,7 +11,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 EXTENSIONS = {'.mp4', '.mkv', '.mov', '.avi', '.webm', '.m4v', '.mpeg', '.mpg', '.wmv', '.ts'}
-OUTPUTS = ('transcript.txt', 'subtitles.srt', 'changes.json')
+OUTPUTS = ('transcript.md', 'changes.json')
 
 
 def read(path):
@@ -98,6 +98,37 @@ def chunks_for(segments, limit):
         offset += len(group)
 
 
+def recognize(model, video, language):
+    """Keep pauses as recognition boundaries instead of concatenating languages."""
+    from faster_whisper.audio import decode_audio
+    from faster_whisper.vad import VadOptions, get_speech_timestamps
+    sample_rate = 16000
+    audio = decode_audio(str(video), sampling_rate=sample_rate)
+    regions = get_speech_timestamps(audio, VadOptions(
+        min_silence_duration_ms=1200, max_speech_duration_s=20, speech_pad_ms=200))
+    segments, languages = [], []
+    for region in regions:
+        offset = region['start'] / sample_rate
+        end_limit = region['end'] / sample_rate
+        generated, info = model.transcribe(
+            audio[region['start']:region['end']], task='transcribe',
+            language=None if language == 'auto' else language, multilingual=language == 'auto',
+            beam_size=1, best_of=1, temperature=0, vad_filter=False,
+            condition_on_previous_text=False)
+        if info.language not in languages:
+            languages.append(info.language)
+        for segment in generated:
+            start, end = float(segment.start), float(segment.end)
+            if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end < start:
+                raise ValueError('ASR returned invalid timestamps')
+            start = max(offset + start, segments[-1]['end'] if segments else 0)
+            end = min(offset + end, end_limit)
+            if start >= end:
+                raise ValueError('ASR returned a segment outside its audio region; retry with a larger model')
+            segments.append(dict(id=len(segments), start=start, end=end, text=segment.text.strip()))
+    return segments, languages
+
+
 def transcribe(args):
     cfg = read(args.config)
     source = Path(args.input).resolve()
@@ -119,7 +150,7 @@ def transcribe(args):
         raise ValueError('chunk_chars must be at least 100')
     options = dict(model_dir=str(model_dir), device=device, compute_type=compute,
                    language=language, repair_model=repair_model, repair_effort=effort,
-                   repair=not args.no_repair, chunk_chars=chunk_chars, protocol=1,
+                   repair=not args.no_repair, chunk_chars=chunk_chars, protocol=3,
                    model_hashes={p.name: digest(p) for p in sorted(model_dir.iterdir())
                                  if p.is_file() and (p.name in {'model.bin', 'config.json', 'tokenizer.json'}
                                                      or p.name.startswith('vocabulary.'))})
@@ -159,17 +190,7 @@ def transcribe(args):
                                      local_files_only=True)
                 if not model.model.is_multilingual:
                     raise ValueError('English-only model cannot support Chinese.')
-            generated, info = model.transcribe(
-                str(video), task='transcribe', language=None if language == 'auto' else language,
-                multilingual=language == 'auto', beam_size=1, best_of=1, temperature=0,
-                vad_filter=True, condition_on_previous_text=False,
-            )
-            segments = []
-            for segment in generated:
-                start, end = float(segment.start), float(segment.end)
-                if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end < start:
-                    raise ValueError('ASR returned invalid timestamps')
-                segments.append(dict(id=len(segments), start=start, end=end, text=segment.text.strip()))
+            segments, languages = recognize(model, video, language)
             if digest(video) != identity['sha256']:
                 raise ValueError('Source changed during transcription; retry when stable.')
             job.mkdir(parents=True, exist_ok=True)
@@ -180,7 +201,7 @@ def transcribe(args):
                                         chunks=len(groups), segments=len(segments),
                                         chunk_hashes=[digest(job / ('chunk-%05d.json' % i))
                                                       for i in range(len(groups))],
-                                        detected_language=info.language))
+                                        detected_languages=languages))
             if args.no_repair:
                 finalize_job(job, unreviewed=True)
                 emit('completed_unreviewed', source=str(video), output=str(destination))
@@ -192,12 +213,10 @@ def transcribe(args):
     return 1 if failures else 0
 
 
-def timestamp(seconds):
-    millis = round(seconds * 1000)
-    hours, rem = divmod(millis, 3600000)
-    minutes, rem = divmod(rem, 60000)
-    secs, ms = divmod(rem, 1000)
-    return '%02d:%02d:%02d,%03d' % (hours, minutes, secs, ms)
+def render_markdown(source, texts):
+    title = Path(source).stem.replace('\n', ' ').replace('\r', ' ')
+    paragraphs = '\n\n'.join(text for text in texts if text.strip())
+    return '# ' + title + '\n\n' + (paragraphs + '\n' if paragraphs else '（未检测到语音）\n')
 
 
 def validate_repair(original, repaired):
@@ -276,13 +295,8 @@ def finalize_job(path, unreviewed=False):
         raise ValueError('Total segment count mismatch')
     stage = path / 'publish'
     stage.mkdir(exist_ok=True)
-    text = '\n'.join(x['text'] for x in all_segments)
-    (stage / 'transcript.txt').write_text(text + ('\n' if text else ''), encoding='utf-8')
-    srt = []
-    for index, segment in enumerate(all_segments, 1):
-        srt.append('%d\n%s --> %s\n%s\n' % (
-            index, timestamp(segment['start']), timestamp(segment['end']), segment['text']))
-    (stage / 'subtitles.srt').write_text('\n'.join(srt), encoding='utf-8')
+    text = render_markdown(data['identity']['source'], [x['text'] for x in all_segments])
+    (stage / 'transcript.md').write_text(text, encoding='utf-8')
     write(stage / 'changes.json', dict(reviewed=not unreviewed, changes=changes))
     write(stage / 'complete.json', dict(key=data['key'], source=data['identity']['source'],
         source_sha256=data['identity']['sha256'], options=data['identity']['options'],

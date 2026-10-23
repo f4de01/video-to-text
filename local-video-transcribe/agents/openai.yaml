@@ -1,4 +1,4 @@
 interface:
   display_name: "本地视频转写"
-  short_description: "本地快速识别中英文视频，由指定子 agent 修复并输出文本和字幕"
+  short_description: "本地快速识别中英文视频，由指定子 agent 修复并输出 Markdown 文字稿"
   default_prompt: "使用 $local-video-transcribe 转写指定目录的视频，并派出配置的模型修复文字。"

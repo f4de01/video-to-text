@@ -34,11 +34,12 @@ class ProtocolTests(unittest.TestCase):
         job, destination = self.job()
         app.finalize_job(job)
         self.assertFalse(job.exists())
-        self.assertEqual((destination / 'transcript.txt').read_text(encoding='utf-8'), '你好 world。\n')
-        self.assertIn('00:00:00,200 --> 00:00:02,000', (destination / 'subtitles.srt').read_text(encoding='utf-8'))
+        self.assertEqual((destination / 'transcript.md').read_text(encoding='utf-8'), '# sample\n\n你好 world。\n')
+        self.assertFalse((destination / 'transcript.txt').exists())
+        self.assertFalse((destination / 'subtitles.srt').exists())
         self.assertNotIn('你好 word', (destination / 'changes.json').read_text(encoding='utf-8'))
         self.assertTrue(app.completed(destination, 'a' * 64))
-        (destination / 'transcript.txt').write_text('user edit', encoding='utf-8')
+        (destination / 'transcript.md').write_text('user edit', encoding='utf-8')
         with self.assertRaises(ValueError):
             app.completed(destination, 'a' * 64)
 
@@ -92,7 +93,8 @@ class ProtocolTests(unittest.TestCase):
         data.update(chunks=0, segments=0)
         app.write(job / 'job.json', data)
         app.finalize_job(job)
-        self.assertEqual((destination / 'subtitles.srt').read_bytes(), b'')
+        self.assertIn('未检测到语音', (destination / 'transcript.md').read_text(encoding='utf-8'))
+        self.assertFalse((destination / 'subtitles.srt').exists())
         self.assertTrue(app.read(destination / 'complete.json')['no_speech'])
 
     def test_batch_continues_after_failure_and_same_names_do_not_collide(self):
@@ -121,7 +123,12 @@ class ProtocolTests(unittest.TestCase):
             compute_type=None, language=None, repair_model=None, repair_effort=None,
             no_repair=False, recursive=True)
         events = []
+        def fake_recognize(model, video, language):
+            generated, info = model.transcribe(str(video))
+            return [dict(id=i, start=s.start, end=s.end, text=s.text)
+                    for i, s in enumerate(generated)], [info.language]
         with patch.dict(sys.modules, {'faster_whisper': types.SimpleNamespace(WhisperModel=FakeModel)}), \
+             patch.object(app, 'recognize', side_effect=fake_recognize), \
              patch.object(app, 'emit', side_effect=lambda status, **kw: events.append(dict(status=status, **kw))):
             self.assertEqual(app.transcribe(args), 1)
             jobs = [x['job'] for x in events if x['status'] == 'pending']

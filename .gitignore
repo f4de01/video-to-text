@@ -1,0 +1,6 @@
+.test-*/
+__pycache__/
+*.pyc
+local-video-transcribe/.venv/
+local-video-transcribe/models/
+测试结果/
