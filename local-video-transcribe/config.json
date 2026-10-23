@@ -1,0 +1,9 @@
+{
+  "asr_model": "base",
+  "device": "cpu",
+  "compute_type": "int8",
+  "language": "auto",
+  "chunk_chars": 6000,
+  "repair_model": "gpt5.6 luna",
+  "repair_reasoning_effort": "low"
+}
