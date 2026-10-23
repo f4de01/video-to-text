@@ -16,19 +16,33 @@ $skill-installer 安装 https://github.com/f4de01/video-to-text/tree/main/local-
 
 ## 调用
 
-在 Codex 对话中输入，不是在终端执行：
+在 Codex 对话中输入，不是在终端执行。以下路径必须换成自己电脑上实际存在的文件或目录；skill 不依赖 D 盘。
+
+Windows 单文件示例：
 
 ```text
 $local-video-transcribe 转写 "D:\视频\课程.mp4"，输出到 "D:\转写结果"。主要语言为中文，复核使用 gpt-6-luna，推理强度 low，生成 Markdown 文字稿。
 ```
 
-目录批量处理：
+Windows 目录批量处理：
 
 ```text
 $local-video-transcribe 转写 "D:\视频" 下的视频，包含子目录，输出到 "D:\转写结果"。复核使用 gpt-6-luna / low。
 ```
 
-macOS 使用对应本地路径，例如 `/Users/me/Movies/课程.mp4`。默认不扫描子目录，需要时明确说明。关闭复核可以直接要求“仅本地离线转写，关闭模型复核”；输出会标记为未复核。
+macOS 单文件示例（`~` 表示当前用户主目录）：
+
+```text
+$local-video-transcribe 转写 "~/Movies/课程.mp4"，输出到 "~/Documents/转写结果"。主要语言为中文，复核使用 gpt-6-luna / low，生成 Markdown 文字稿。
+```
+
+macOS 目录批量处理：
+
+```text
+$local-video-transcribe 转写 "~/Movies/待转写" 下的视频，包含子目录，输出到 "~/Documents/转写结果"。复核使用 gpt-6-luna / low。
+```
+
+也可以用自然语言指定“当前工作区的某个视频文件”，由 agent 确认实际路径；未指定输出位置时放到当前工作区的 `转写结果` 子目录。默认不扫描子目录，需要时明确说明。关闭复核可以直接要求“仅本地离线转写，关闭模型复核”；输出会标记为未复核。
 
 agent 负责环境检查、本地识别、子 agent 复核及输出校验，不需要手动逐条运行脚本。运行环境需能够读取指定文件、写入输出目录并调用指定模型的子 agent；所需权限仍受当前 Codex 环境约束。仅在终端运行 Python 脚本不会自动启动 Codex 子 agent。
 

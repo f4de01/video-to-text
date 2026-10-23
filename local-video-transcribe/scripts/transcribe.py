@@ -15,7 +15,7 @@ OUTPUTS = ('transcript.md', 'changes.json')
 
 
 def read(path):
-    return json.loads(Path(path).read_text(encoding='utf-8-sig'))
+    return json.loads(Path(path).expanduser().read_text(encoding='utf-8-sig'))
 
 
 def write(path, data):
@@ -38,7 +38,7 @@ def emit(status, **kwargs):
 
 
 def check_model(path):
-    path = Path(path).resolve()
+    path = Path(path).expanduser().resolve()
     required = ('model.bin', 'config.json', 'tokenizer.json')
     missing = [name for name in required if not (path / name).is_file()]
     if not list(path.glob('vocabulary.*')):
@@ -52,7 +52,7 @@ def prepare(args):
     if args.model.endswith('.en'):
         raise ValueError('Use a multilingual model for Chinese and English.')
     from faster_whisper.utils import download_model
-    path = download_model(args.model, output_dir=str(Path(args.model_dir).resolve()))
+    path = download_model(args.model, output_dir=str(Path(args.model_dir).expanduser().resolve()))
     check_model(path)
     emit('prepared', model_dir=path)
 
@@ -131,8 +131,8 @@ def recognize(model, video, language):
 
 def transcribe(args):
     cfg = read(args.config)
-    source = Path(args.input).resolve()
-    output = Path(args.output).resolve()
+    source = Path(args.input).expanduser().resolve()
+    output = Path(args.output).expanduser().resolve()
     if not source.exists():
         raise ValueError('Input does not exist: ' + str(source))
     if source.is_dir() and within(source, output):
@@ -246,7 +246,7 @@ def validate_repair(original, repaired):
 
 
 def load_job(path):
-    path = Path(path).resolve()
+    path = Path(path).expanduser().resolve()
     if path.parent.name != '.work' or not re.fullmatch(r'[0-9a-f]{64}', path.name):
         raise ValueError('Expected an owned .work/<job hash> directory')
     data = read(path / 'job.json')

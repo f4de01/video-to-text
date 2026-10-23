@@ -15,7 +15,7 @@ description: 将本地单个视频或目录中的视频转成中英文 Markdown 
 
 ## 工作流程
 
-1. 确定输入路径和输出目录。默认不扫描子目录；需要时加 `--recursive`。支持格式由脚本的 `EXTENSIONS` 定义。只读取源视频，不移动或改名。先完成上述复核模型检查，避免长时间识别后才发现无法复核。
+1. 确认当前操作系统，使用用户提供的实际输入路径和输出目录。Windows 盘符示例只适用于 Windows；macOS 使用本机路径（如 `~/Movies/课程.mp4`），展开 `~` 并验证文件存在，不能照抄示例盘符或虚构用户名。未指定输出目录时使用当前工作区的 `转写结果` 子目录。默认不扫描子目录；需要时加 `--recursive`。支持格式由脚本的 `EXTENSIONS` 定义。只读取源视频，不移动或改名。先完成上述复核模型检查，避免长时间识别后才发现无法复核。
 2. 首次运行或环境缺失时读 [references/setup.md](references/setup.md)，创建隔离环境并准备本地模型。运行脚本 `--help` 了解参数。以下 `PYTHON` 指环境中 Python 的绝对路径，`SCRIPT` 指本 skill 的 `scripts/transcribe.py`；调用时将它们替换成真实路径，不把占位符直接交给 shell。
 3. 执行：`PYTHON SCRIPT transcribe INPUT --model-dir MODEL_DIR --output OUTPUT`。需要覆盖修复模型时传 `--repair-model MODEL_ID --repair-effort low`；关闭复核则加 `--no-repair`。脚本输出 JSON 行：`pending` 包含 job 路径；`skipped` 表示相同输入和配置已经完成；`error` 表示该视频失败，其余视频继续。非零退出码时也处理已经生成的 pending job。
 4. 对每个 pending job，读取其中 `job.json` 和 `chunk-*.json`。按 [references/repair.md](references/repair.md) 派出子 agent，显式传入配置模型和推理强度。若工具支持 `fork_turns`，使用 `none`，仅提供复核规则、分块路径及写入路径；不要继承整场对话或视频路径。并行数不得超过工具额度，默认至多两个修复子 agent；多个块可由同一个 agent 顺序完成。

@@ -2,7 +2,9 @@
 
 建议 Python 3.11 的 64 位环境。Windows 使用 x64 Python，macOS 使用对应 Intel/Apple Silicon 的原生 Python。先找现有解释器；没有时说明需安装 Python，再按该电脑已有的包管理器处理。不要修改全局 Python 包。
 
-从 skill 目录执行。Windows PowerShell：
+先定位安装后的 skill 目录并从该目录执行；下面的视频和输出路径是示例，必须替换成用户本机路径。根据当前系统选用对应命令，输入、输出和模型目录均支持 `~` 主目录写法。
+
+Windows PowerShell：
 
 ```powershell
 py -3.11 -m venv .venv
@@ -17,7 +19,7 @@ macOS：
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python scripts/transcribe.py prepare --model base --model-dir models/base
-.venv/bin/python scripts/transcribe.py transcribe '/Users/me/视频' --model-dir models/base --output '/Users/me/转写结果'
+.venv/bin/python scripts/transcribe.py transcribe "$HOME/Movies/待转写" --model-dir models/base --output "$HOME/Documents/转写结果"
 ```
 
 `prepare` 是显式联网阶段；已有模型直接指定目录。必须是 CTranslate2 Whisper 模型，包含 `model.bin`、`config.json`、`tokenizer.json` 和词表文件。不可使用 `.en` 英文专用模型处理中文。`transcribe` 设置 Hugging Face 离线标志并只加载本地目录；缺失文件时停止，不自动下载。
