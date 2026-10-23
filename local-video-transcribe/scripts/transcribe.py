@@ -150,7 +150,7 @@ def transcribe(args):
         raise ValueError('chunk_chars must be at least 100')
     options = dict(model_dir=str(model_dir), device=device, compute_type=compute,
                    language=language, repair_model=repair_model, repair_effort=effort,
-                   repair=not args.no_repair, chunk_chars=chunk_chars, protocol=3,
+                   repair=not args.no_repair, chunk_chars=chunk_chars, protocol=4,
                    model_hashes={p.name: digest(p) for p in sorted(model_dir.iterdir())
                                  if p.is_file() and (p.name in {'model.bin', 'config.json', 'tokenizer.json'}
                                                      or p.name.startswith('vocabulary.'))})
@@ -213,9 +213,19 @@ def transcribe(args):
     return 1 if failures else 0
 
 
-def render_markdown(source, texts):
+def format_timestamp(seconds):
+    milliseconds = round(seconds * 1000)
+    hours, remainder = divmod(milliseconds, 3600000)
+    minutes, remainder = divmod(remainder, 60000)
+    seconds, milliseconds = divmod(remainder, 1000)
+    return f'{hours:02d}:{minutes:02d}:{seconds:02d}.{milliseconds:03d}'
+
+
+def render_markdown(source, segments):
     title = Path(source).stem.replace('\n', ' ').replace('\r', ' ')
-    paragraphs = '\n\n'.join(text for text in texts if text.strip())
+    paragraphs = '\n\n'.join(
+        f"[{format_timestamp(row['start'])} --> {format_timestamp(row['end'])}] {row['text']}"
+        for row in segments if row['text'].strip())
     return '# ' + title + '\n\n' + (paragraphs + '\n' if paragraphs else '（未检测到语音）\n')
 
 
@@ -295,7 +305,7 @@ def finalize_job(path, unreviewed=False):
         raise ValueError('Total segment count mismatch')
     stage = path / 'publish'
     stage.mkdir(exist_ok=True)
-    text = render_markdown(data['identity']['source'], [x['text'] for x in all_segments])
+    text = render_markdown(data['identity']['source'], all_segments)
     (stage / 'transcript.md').write_text(text, encoding='utf-8')
     write(stage / 'changes.json', dict(reviewed=not unreviewed, changes=changes))
     write(stage / 'complete.json', dict(key=data['key'], source=data['identity']['source'],

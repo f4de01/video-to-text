@@ -6,6 +6,7 @@ and English speech after 25 seconds, as in the recorded synthetic smoke test.
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import tempfile
 import unittest
@@ -15,6 +16,35 @@ import transcribe as app
 @unittest.skipUnless(os.environ.get('TEST_MODEL_DIR') and os.environ.get('TEST_MIXED_VIDEO'),
                      'Real model and mixed-language video not provided')
 class LiveTranscription(unittest.TestCase):
+    def test_batch_one_markdown_per_video_with_matching_title(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            root = Path(workspace)
+            inputs, output = root / 'inputs', root / 'output'
+            names = ['中文课程.mp4', 'English lesson.mp4', '子目录/中文课程.mp4']
+            for name in names:
+                video = inputs / name
+                video.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(os.environ['TEST_MIXED_VIDEO'], video)
+            result = subprocess.run([sys.executable, str(Path(__file__).with_name('transcribe.py')),
+                'transcribe', str(inputs), '--model-dir', os.environ['TEST_MODEL_DIR'],
+                '--output', str(output), '--recursive', '--no-repair'],
+                capture_output=True, encoding='utf-8')
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            documents = list(output.glob('video-*/*.md'))
+            self.assertEqual(len(documents), len(names))
+            sources = set()
+            for document in documents:
+                marker = app.read(document.parent / 'complete.json')
+                source = Path(marker['source'])
+                sources.add(source.relative_to(inputs).as_posix())
+                text = document.read_text(encoding='utf-8')
+                self.assertTrue(text.startswith('# ' + source.stem + '\n\n'))
+                self.assertRegex(text, r'\[\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}\]')
+                self.assertIn('local video transcription', text.lower())
+                self.assertEqual(len(list(document.parent.glob('*.md'))), 1)
+                self.assertTrue(app.completed(document.parent, marker['key']))
+            self.assertEqual(sources, set(names))
+
     def test_both_languages_and_bounded_timestamps(self):
         import av
         with av.open(os.environ['TEST_MIXED_VIDEO']) as video:

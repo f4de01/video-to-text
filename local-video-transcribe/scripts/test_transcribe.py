@@ -34,7 +34,8 @@ class ProtocolTests(unittest.TestCase):
         job, destination = self.job()
         app.finalize_job(job)
         self.assertFalse(job.exists())
-        self.assertEqual((destination / 'transcript.md').read_text(encoding='utf-8'), '# sample\n\n你好 world。\n')
+        self.assertEqual((destination / 'transcript.md').read_text(encoding='utf-8'),
+                         '# sample\n\n[00:00:00.200 --> 00:00:02.000] 你好 world。\n')
         self.assertFalse((destination / 'transcript.txt').exists())
         self.assertFalse((destination / 'subtitles.srt').exists())
         self.assertNotIn('你好 word', (destination / 'changes.json').read_text(encoding='utf-8'))
@@ -42,6 +43,23 @@ class ProtocolTests(unittest.TestCase):
         (destination / 'transcript.md').write_text('user edit', encoding='utf-8')
         with self.assertRaises(ValueError):
             app.completed(destination, 'a' * 64)
+
+    def test_unreviewed_output_keeps_original_timeline(self):
+        job, destination = self.job()
+        data = app.read(job / 'job.json')
+        data['identity']['options']['repair'] = False
+        app.write(job / 'job.json', data)
+        app.finalize_job(job, unreviewed=True)
+        self.assertEqual((destination / 'transcript.md').read_text(encoding='utf-8'),
+                         '# sample\n\n[00:00:00.200 --> 00:00:02.000] 你好 word\n')
+        self.assertFalse(app.read(destination / 'complete.json')['reviewed'])
+
+    def test_timeline_preserves_gaps_and_hour_boundaries(self):
+        text = app.render_markdown('sample.mp4', [
+            dict(start=59.9996, end=61.25, text='first'),
+            dict(start=3599.9996, end=3602.003, text='second')])
+        self.assertEqual(text, '# sample\n\n[00:01:00.000 --> 00:01:01.250] first\n\n'
+                         '[01:00:00.000 --> 01:00:02.003] second\n')
 
     def test_invalid_repair_never_publishes(self):
         job, destination = self.job()
